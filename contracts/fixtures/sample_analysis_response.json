@@ -1,0 +1,93 @@
+{
+  "document_id": 42,
+  "file_name": "vendor_agreement_v3.docx",
+  "status": "completed",
+  "clauses": [
+    {
+      "id": 301,
+      "document_id": 42,
+      "clause_type": "governing_law",
+      "text": "This Agreement shall be governed by the laws of the State of Maharashtra, India.",
+      "start_offset": 1520,
+      "end_offset": 1601,
+      "confidence": 0.97,
+      "risk_level": "low",
+      "reviewer_status": "confirmed",
+      "reviewer_label": null,
+      "created_at": "2026-11-25T10:14:03Z"
+    },
+    {
+      "id": 302,
+      "document_id": 42,
+      "clause_type": "non_compete",
+      "text": "The Service Provider shall not, directly or indirectly, engage in any business competitive with the Company anywhere in India for a period of five (5) years after termination.",
+      "start_offset": 8410,
+      "end_offset": 8595,
+      "confidence": 0.91,
+      "risk_level": "high",
+      "reviewer_status": "relabeled",
+      "reviewer_label": "exclusivity",
+      "created_at": "2026-11-25T10:14:04Z"
+    },
+    {
+      "id": 303,
+      "document_id": 42,
+      "clause_type": "cap_on_liability",
+      "text": "The total liability of the Company under this Agreement shall not exceed the fees paid in the three (3) months preceding the claim.",
+      "start_offset": 9880,
+      "end_offset": 10021,
+      "confidence": 0.88,
+      "risk_level": "medium",
+      "reviewer_status": "pending",
+      "reviewer_label": null,
+      "created_at": "2026-11-25T10:14:04Z"
+    },
+    {
+      "id": 304,
+      "document_id": 42,
+      "clause_type": "uncapped_liability",
+      "text": "Notwithstanding anything to the contrary, the Service Provider's obligations under Clause 12 survive without limitation of liability.",
+      "start_offset": 10460,
+      "end_offset": 10600,
+      "confidence": 0.54,
+      "risk_level": "high",
+      "reviewer_status": "pending",
+      "reviewer_label": null,
+      "created_at": "2026-11-25T10:14:05Z"
+    }
+  ],
+  "missing_clauses": [
+    {
+      "id": 88,
+      "document_id": 42,
+      "clause_type": "termination_for_convenience",
+      "severity": "medium",
+      "message": "No clause allows either party to terminate for convenience; consider adding a notice-based termination right."
+    },
+    {
+      "id": 89,
+      "document_id": 42,
+      "clause_type": "ip_ownership_assignment",
+      "severity": "high",
+      "message": "No clause assigns intellectual property in the deliverables to the Company."
+    }
+  ],
+  "summary": {
+    "risk_level": "high",
+    "counts_by_type": {
+      "governing_law": 1,
+      "non_compete": 1,
+      "cap_on_liability": 1,
+      "uncapped_liability": 1
+    },
+    "counts_by_risk": {
+      "high": 2,
+      "medium": 1,
+      "low": 1
+    },
+    "pages_processed": 14
+  },
+  "disclaimer": {
+    "text": "This analysis is decision support only and is not legal advice. A qualified lawyer must review all findings."
+  }
+}

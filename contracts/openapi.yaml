@@ -1,0 +1,1094 @@
+openapi: 3.1.0
+info:
+  title: Legal Document Review & Risk Flagging Platform API
+  version: 0.1.0
+  description: |
+    REST API for the Legal Document Review & Risk Flagging Platform.
+
+    Conventions:
+    - JSON field names are snake_case.
+    - Dates and times are ISO 8601 UTC strings (e.g. `2026-11-25T16:30:00Z`).
+    - All ids are integers.
+    - Authentication is a Bearer JWT in the `Authorization` header.
+    - Errors are returned as `{"detail": "<message>"}`.
+    - This tool assists review and is NOT legal advice; that notice is carried by
+      the API so every client can surface it.
+
+    Roles: `reviewer` and `admin`.
+
+    Document statuses: `uploaded`, `extracting`, `classifying`, `scoring`,
+    `completed`, `failed`.
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+tags:
+  - name: auth
+    description: Registration, login and current user
+  - name: documents
+    description: Document upload and pipeline
+  - name: clauses
+    description: Clause review by the reviewer
+  - name: notes
+    description: Notes attached to documents or clauses
+  - name: reports
+    description: PDF report generation and download
+  - name: admin
+    description: Admin-only endpoints
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new account
+      description: Anyone (no authentication). The first registered user may be promoted to admin by seeding; registration always creates a `reviewer`.
+      security: []
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in and get a JWT
+      security: []
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /me:
+    get:
+      tags: [auth]
+      summary: Current logged-in user
+      operationId: getMe
+      responses:
+        '200':
+          description: The authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /documents:
+    post:
+      tags: [documents]
+      summary: Upload a PDF or DOCX contract
+      description: |
+        Reviewer uploads a contract. The file is stored and the analysis pipeline
+        is started in the background; the response is `202 Accepted` with the
+        initial `uploaded` status. Poll `GET /documents/{id}` or
+        `GET /documents/{id}/analysis` for progress.
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: A PDF or DOCX file, up to MAX_UPLOAD_MB.
+      responses:
+        '202':
+          description: Upload accepted and queued for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: File exceeds the configured maximum upload size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type; only PDF and DOCX are accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [documents]
+      summary: List the reviewer's own documents
+      operationId: listDocuments
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring match on file name.
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/DocumentStatus'
+        - name: sort
+          in: query
+          required: false
+          description: "`-created_at` (default, newest first) or `created_at`."
+          schema:
+            type: string
+            enum: [created_at, -created_at]
+            default: -created_at
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: One page of the reviewer's documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentList'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /documents/{id}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags: [documents]
+      summary: Document status and metadata (owner only)
+      operationId: getDocument
+      responses:
+        '200':
+          description: The document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '403':
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [documents]
+      summary: Delete a document and its analysis (owner only)
+      operationId: deleteDocument
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /documents/{id}/reprocess:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    post:
+      tags: [documents]
+      summary: Re-run extraction/analysis for a document (owner only)
+      operationId: reprocessDocument
+      responses:
+        '202':
+          description: Reprocessing queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '403':
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Pipeline already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /documents/{id}/analysis:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags: [documents]
+      summary: Full analysis result for a document (owner only)
+      description: Includes clauses, missing clauses, risk summary and the disclaimer.
+      operationId: getDocumentAnalysis
+      responses:
+        '200':
+          description: Full analysis result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '403':
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /clauses/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ClauseId'
+    patch:
+      tags: [clauses]
+      summary: Review a clause (owner of the parent document)
+      description: Confirm, reject or relabel a clause, optionally changing its reviewer label.
+      operationId: patchClause
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClauseUpdateRequest'
+      responses:
+        '200':
+          description: Updated clause
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clause'
+        '403':
+          description: Not the owner of the clause's document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Clause not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid reviewer_status transition or payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /clauses/{id}/notes:
+    parameters:
+      - $ref: '#/components/parameters/ClauseId'
+    post:
+      tags: [notes]
+      summary: Add a note to a clause (owner of the parent document)
+      operationId: createClauseNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteCreateRequest'
+      responses:
+        '201':
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '403':
+          description: Not the owner of the clause's document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Clause not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /notes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/NoteId'
+    put:
+      tags: [notes]
+      summary: Edit a note (author only)
+      operationId: updateNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteUpdateRequest'
+      responses:
+        '200':
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '403':
+          description: Not the note author
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [notes]
+      summary: Delete a note (author only)
+      operationId: deleteNote
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          description: Not the note author
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /documents/{id}/report:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    post:
+      tags: [reports]
+      summary: Generate a PDF report for a document (owner only)
+      description: |
+        Renders the report synchronously and returns its metadata. The body
+        chooses whether reviewer notes are included in the PDF.
+      operationId: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreateRequest'
+      responses:
+        '201':
+          description: Report generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '403':
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Analysis is not completed yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reports/{id}/download:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    get:
+      tags: [reports]
+      summary: Download a generated PDF report (owner only)
+      operationId: downloadReport
+      responses:
+        '200':
+          description: The PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Not the owner of the report's document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: List users (admin only)
+      operationId: adminListUsers
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: All users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [admin]
+      summary: Change a user's role (admin only)
+      description: Promote a reviewer to admin or demote back; at least one field is required.
+      operationId: adminUpdateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserUpdateRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Cannot change your own role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/rules:
+    get:
+      tags: [admin]
+      summary: Get the rule-engine configuration (admin only)
+      operationId: adminGetRules
+      responses:
+        '200':
+          description: Current rule configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulesConfig'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [admin]
+      summary: Replace the rule-engine configuration (admin only)
+      operationId: adminPutRules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulesConfig'
+      responses:
+        '200':
+          description: Updated rule configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/metrics:
+    get:
+      tags: [admin]
+      summary: Platform usage metrics (admin only)
+      operationId: adminGetMetrics
+      responses:
+        '200':
+          description: Usage metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMetrics'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/low-confidence.csv:
+    get:
+      tags: [admin]
+      summary: Download clauses below the confidence threshold as CSV (admin only)
+      operationId: adminLowConfidenceCsv
+      parameters:
+        - name: threshold
+          in: query
+          required: false
+          description: Minimum model confidence to keep a clause; default 0.6.
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 1
+            default: 0.6
+      responses:
+        '200':
+          description: CSV of low-confidence clauses
+          content:
+            text/csv:
+              schema:
+                type: string
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      tags: [auth]
+      summary: Liveness probe
+      security: []
+      operationId: health
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ClauseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    NoteId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ReportId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  schemas:
+    Role:
+      type: string
+      enum: [reviewer, admin]
+
+    DocumentStatus:
+      type: string
+      enum: [uploaded, extracting, classifying, scoring, completed, failed]
+
+    RiskLevel:
+      type: string
+      enum: [high, medium, low]
+
+    ReviewerStatus:
+      type: string
+      enum: [pending, confirmed, rejected, relabeled]
+
+    ClauseType:
+      type: string
+      description: One of the ten supported clause ids (see CONTEXT.md).
+      enum:
+        - governing_law
+        - termination_for_convenience
+        - non_compete
+        - exclusivity
+        - anti_assignment
+        - change_of_control
+        - cap_on_liability
+        - uncapped_liability
+        - liquidated_damages
+        - ip_ownership_assignment
+
+    Disclaimer:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: Decision-support notice that clients must display.
+          example: This report is decision support only and is not legal advice.
+
+    User:
+      type: object
+      required: [id, name, email, role, created_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+        created_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC.
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, role, name]
+      properties:
+        access_token:
+          type: string
+          description: Bearer JWT.
+        token_type:
+          type: string
+          enum: [bearer]
+        role:
+          $ref: '#/components/schemas/Role'
+        name:
+          type: string
+
+    Document:
+      type: object
+      required: [id, owner_id, file_name, status, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+        owner_id:
+          type: integer
+        file_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        size_bytes:
+          type: integer
+          description: Present after the file has been stored.
+        risk_level:
+          $ref: '#/components/schemas/RiskLevel'
+        error_message:
+          type: string
+          description: Set when status is `failed`.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DocumentList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Clause:
+      type: object
+      required: [id, document_id, clause_type, text, start_offset, end_offset, confidence, reviewer_status, created_at]
+      properties:
+        id:
+          type: integer
+        document_id:
+          type: integer
+        clause_type:
+          $ref: '#/components/schemas/ClauseType'
+        text:
+          type: string
+          description: Exact substring of the extracted document text between the offsets.
+        start_offset:
+          type: integer
+          description: Character offset in the extracted document text.
+        end_offset:
+          type: integer
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        risk_level:
+          $ref: '#/components/schemas/RiskLevel'
+        reviewer_status:
+          $ref: '#/components/schemas/ReviewerStatus'
+        reviewer_label:
+          $ref: '#/components/schemas/ClauseType'
+          description: Set when reviewer_status is `relabeled`.
+        created_at:
+          type: string
+          format: date-time
+
+    ClauseUpdateRequest:
+      type: object
+      required: [reviewer_status]
+      properties:
+        reviewer_status:
+          $ref: '#/components/schemas/ReviewerStatus'
+        reviewer_label:
+          $ref: '#/components/schemas/ClauseType'
+          description: Required when reviewer_status is `relabeled`; rejected otherwise.
+
+    Note:
+      type: object
+      required: [id, author_id, body, created_at]
+      properties:
+        id:
+          type: integer
+        document_id:
+          type: integer
+          description: Null for clause notes.
+        clause_id:
+          type: integer
+          description: Null for document-level notes.
+        author_id:
+          type: integer
+        body:
+          type: string
+          maxLength: 5000
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NoteCreateRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+
+    NoteUpdateRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+
+    MissingClause:
+      type: object
+      required: [id, document_id, clause_type, severity, message]
+      properties:
+        id:
+          type: integer
+        document_id:
+          type: integer
+        clause_type:
+          $ref: '#/components/schemas/ClauseType'
+        severity:
+          $ref: '#/components/schemas/RiskLevel'
+        message:
+          type: string
+          description: Human-readable explanation of why this clause is expected.
+
+    Report:
+      type: object
+      required: [id, document_id, include_notes, created_at]
+      properties:
+        id:
+          type: integer
+        document_id:
+          type: integer
+        include_notes:
+          type: boolean
+        file_name:
+          type: string
+          description: Server-side stored file name of the PDF.
+        created_at:
+          type: string
+          format: date-time
+
+    ReportCreateRequest:
+      type: object
+      required: [include_notes]
+      properties:
+        include_notes:
+          type: boolean
+
+    RulesConfig:
+      type: object
+      description: |
+        Key/value configuration consumed by the engine's rule loader
+        (see contracts/engine_contract.md). Values are JSON; unknown keys are
+        rejected with 422.
+      required: [rules]
+      properties:
+        rules:
+          type: object
+          additionalProperties:
+            description: e.g. high_confidence_threshold, missing_clause_severity, risk_weights.
+            type: object
+
+    AdminMetrics:
+      type: object
+      required: [total_users, total_documents, documents_by_status, total_clauses, clause_reviews, documents_by_risk, low_confidence_clauses]
+      properties:
+        total_users:
+          type: integer
+        total_documents:
+          type: integer
+        documents_by_status:
+          type: object
+          description: Count per document status, zero-filled for all statuses.
+          additionalProperties:
+            type: integer
+        documents_by_risk:
+          type: object
+          description: Count per risk level, zero-filled for all levels.
+          additionalProperties:
+            type: integer
+        total_clauses:
+          type: integer
+        clause_reviews:
+          type: integer
+          description: Clauses with reviewer_status other than `pending`.
+        low_confidence_clauses:
+          type: integer
+          description: Clauses below the configured confidence threshold.
+
+    AnalysisResponse:
+      type: object
+      required: [document_id, status, clauses, missing_clauses, summary, disclaimer]
+      properties:
+        document_id:
+          type: integer
+        file_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        clauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Clause'
+        missing_clauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissingClause'
+        summary:
+          type: object
+          required: [risk_level, counts_by_type, counts_by_risk]
+          properties:
+            risk_level:
+              $ref: '#/components/schemas/RiskLevel'
+            counts_by_type:
+              type: object
+              additionalProperties:
+                type: integer
+              description: Clause count per clause type.
+            counts_by_risk:
+              type: object
+              additionalProperties:
+                type: integer
+              description: Clause count per risk level.
+            pages_processed:
+              type: integer
+              description: Present when the extraction reports page counts.
+        disclaimer:
+          $ref: '#/components/schemas/Disclaimer'
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          example: Resource not found
