@@ -1,0 +1,42 @@
+{
+  "overall_risk": "high",
+  "clause_ratings": [
+    {
+      "index": 0,
+      "risk_level": "medium",
+      "explanation": "Either side can end this contract without giving a reason. That gives flexibility, but the other side could also leave at short notice. Check how much notice is required. Ask a lawyer if you are unsure."
+    },
+    {
+      "index": 1,
+      "risk_level": "low",
+      "explanation": "This clause sets an upper limit on how much one side can owe the other. A limit usually protects the party that might have to pay. Check that the limit is a sensible amount. Ask a lawyer if you are unsure."
+    },
+    {
+      "index": 2,
+      "risk_level": "high",
+      "explanation": "This clause says liability has no upper limit in certain cases, such as fraud or gross negligence. If something goes wrong, the amount owed could be very large. Check which cases are covered. Ask a lawyer if you are unsure."
+    },
+    {
+      "index": 3,
+      "risk_level": "medium",
+      "explanation": "This clause stops one side from working with competitors for a period of time. It can limit future business. Check how long it lasts and how wide it is. Ask a lawyer if you are unsure."
+    },
+    {
+      "index": 4,
+      "risk_level": "low",
+      "explanation": "This clause says the contract cannot be handed to someone else without the other side's consent. It protects you from an unknown new partner. Ask a lawyer if you are unsure."
+    },
+    {
+      "index": 5,
+      "risk_level": "medium",
+      "explanation": "This may be a clause about what happens if a company is bought or changes owners. The AI is not sure about it, so please read it yourself and confirm or correct the label. Ask a lawyer if you are unsure."
+    }
+  ],
+  "missing_clauses": [
+    {
+      "clause_type": "governing_law",
+      "risk_level": "medium",
+      "explanation": "No governing law clause was found. This clause says which country or state law applies if there is a dispute. Without it, deciding which law applies can be difficult. Ask a lawyer if you are unsure."
+    }
+  ]
+}

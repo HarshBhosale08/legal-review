@@ -1,0 +1,53 @@
+{
+  "model_version": "sample-0.1",
+  "clauses": [
+    {
+      "clause_type": "termination_for_convenience",
+      "start": 560,
+      "end": 811,
+      "text": "3. Termination for Convenience. Either party may terminate this Agreement at any time, for any reason or for no reason, by giving thirty days written notice to the other party. Termination under this clause does not require either party to show cause.",
+      "confidence": 0.93,
+      "needs_review": false
+    },
+    {
+      "clause_type": "cap_on_liability",
+      "start": 813,
+      "end": 1025,
+      "text": "4. Limitation of Liability. In no event shall the total liability of either party under this Agreement exceed the fees paid by the Client in the twelve months before the claim arose, except as stated in clause 5.",
+      "confidence": 0.87,
+      "needs_review": false
+    },
+    {
+      "clause_type": "uncapped_liability",
+      "start": 1027,
+      "end": 1228,
+      "text": "5. Exceptions. Nothing in this Agreement limits or caps the liability of either party for fraud, gross negligence, wilful misconduct or breach of confidentiality, and such liability shall be unlimited.",
+      "confidence": 0.81,
+      "needs_review": false
+    },
+    {
+      "clause_type": "non_compete",
+      "start": 1230,
+      "end": 1426,
+      "text": "6. Non-Compete. During this Agreement and for twelve months afterwards, the Supplier shall not provide services that compete with the Client's business to any other design studio in the same city.",
+      "confidence": 0.78,
+      "needs_review": false
+    },
+    {
+      "clause_type": "anti_assignment",
+      "start": 1428,
+      "end": 1589,
+      "text": "7. Assignment. Neither party may assign or transfer this Agreement or any right under it to any third party without the prior written consent of the other party.",
+      "confidence": 0.9,
+      "needs_review": false
+    },
+    {
+      "clause_type": "change_of_control",
+      "start": 1591,
+      "end": 1756,
+      "text": "8. Change of Ownership. If the Supplier is acquired or merges with another company, the Client may review the arrangement and discuss any changes with the new owner.",
+      "confidence": 0.42,
+      "needs_review": true
+    }
+  ]
+}

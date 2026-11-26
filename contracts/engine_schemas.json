@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-review/engine_schemas.json",
+  "title": "Interface A: JSON shapes returned by legal_engine",
+  "description": "Used by Module 1 tests and by the Module 2 engine adapter. Semantic rules that a schema cannot express (offsets, ordering, risk logic) are in engine_contract.md and checked by validate_contracts.py.",
+  "$defs": {
+    "ClauseType": {
+      "type": "string",
+      "enum": [
+        "governing_law",
+        "termination_for_convenience",
+        "non_compete",
+        "exclusivity",
+        "anti_assignment",
+        "change_of_control",
+        "cap_on_liability",
+        "uncapped_liability",
+        "liquidated_damages",
+        "ip_ownership_assignment"
+      ]
+    },
+    "RiskLevel": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "EngineClause": {
+      "type": "object",
+      "required": [
+        "clause_type",
+        "start",
+        "end",
+        "text",
+        "confidence",
+        "needs_review"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "clause_type": {
+          "$ref": "#/$defs/ClauseType"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "needs_review": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ClassifyResult": {
+      "type": "object",
+      "required": [
+        "model_version",
+        "clauses"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EngineClause"
+          }
+        }
+      }
+    },
+    "ClauseRating": {
+      "type": "object",
+      "required": [
+        "index",
+        "risk_level",
+        "explanation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "risk_level": {
+          "$ref": "#/$defs/RiskLevel"
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "MissingClause": {
+      "type": "object",
+      "required": [
+        "clause_type",
+        "risk_level",
+        "explanation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "clause_type": {
+          "$ref": "#/$defs/ClauseType"
+        },
+        "risk_level": {
+          "$ref": "#/$defs/RiskLevel"
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ScoreResult": {
+      "type": "object",
+      "required": [
+        "overall_risk",
+        "clause_ratings",
+        "missing_clauses"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "overall_risk": {
+          "$ref": "#/$defs/RiskLevel"
+        },
+        "clause_ratings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClauseRating"
+          }
+        },
+        "missing_clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MissingClause"
+          }
+        }
+      }
+    },
+    "Rules": {
+      "type": "object",
+      "required": [
+        "tau_accept",
+        "tau_floor",
+        "expected_clauses",
+        "missing_risk",
+        "base_risk"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tau_accept": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "tau_floor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "expected_clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClauseType"
+          }
+        },
+        "missing_risk": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ClauseType"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/RiskLevel"
+          }
+        },
+        "base_risk": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ClauseType"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/RiskLevel"
+          }
+        }
+      }
+    }
+  }
+}

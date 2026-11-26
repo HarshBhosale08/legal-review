@@ -1,0 +1,26 @@
+{
+  "tau_accept": 0.5,
+  "tau_floor": 0.25,
+  "expected_clauses": [
+    "governing_law",
+    "cap_on_liability",
+    "termination_for_convenience"
+  ],
+  "missing_risk": {
+    "governing_law": "medium",
+    "cap_on_liability": "high",
+    "termination_for_convenience": "medium"
+  },
+  "base_risk": {
+    "governing_law": "low",
+    "termination_for_convenience": "medium",
+    "non_compete": "medium",
+    "exclusivity": "medium",
+    "anti_assignment": "low",
+    "change_of_control": "medium",
+    "cap_on_liability": "low",
+    "uncapped_liability": "high",
+    "liquidated_damages": "medium",
+    "ip_ownership_assignment": "medium"
+  }
+}

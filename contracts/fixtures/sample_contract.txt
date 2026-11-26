@@ -1,0 +1,27 @@
+SAMPLE SERVICES AGREEMENT
+
+This is a made-up document used only to test software. It is not a real contract and it is not legal advice.
+
+This Services Agreement is made on 1 January 2027 between Example Studio Pvt Ltd (the Client) and Sample Vendor Pvt Ltd (the Supplier).
+
+1. Services. The Supplier shall provide website design and maintenance services to the Client as described in each work order signed by both parties.
+
+2. Fees. The Client shall pay each invoice within thirty days of receiving it. Late payments carry interest at one percent per month.
+
+3. Termination for Convenience. Either party may terminate this Agreement at any time, for any reason or for no reason, by giving thirty days written notice to the other party. Termination under this clause does not require either party to show cause.
+
+4. Limitation of Liability. In no event shall the total liability of either party under this Agreement exceed the fees paid by the Client in the twelve months before the claim arose, except as stated in clause 5.
+
+5. Exceptions. Nothing in this Agreement limits or caps the liability of either party for fraud, gross negligence, wilful misconduct or breach of confidentiality, and such liability shall be unlimited.
+
+6. Non-Compete. During this Agreement and for twelve months afterwards, the Supplier shall not provide services that compete with the Client's business to any other design studio in the same city.
+
+7. Assignment. Neither party may assign or transfer this Agreement or any right under it to any third party without the prior written consent of the other party.
+
+8. Change of Ownership. If the Supplier is acquired or merges with another company, the Client may review the arrangement and discuss any changes with the new owner.
+
+9. Confidentiality. Each party shall keep the other party's confidential information secret and use it only for the purpose of this Agreement.
+
+10. General. This Agreement is the whole agreement between the parties. Any change must be in writing and signed by both parties.
+
+Signed for the Client: ______________________    Signed for the Supplier: ______________________

@@ -1,0 +1,691 @@
+openapi: 3.1.0
+info:
+  title: Legal Document Review and Risk Flagging Platform API
+  version: 1.0.0
+  description: |
+    Interface B (Module 2 backend <-> Module 3 web application). Version contracts-v1.
+    Conventions: JSON field names are snake_case, dates are ISO 8601 in UTC, ids are integers.
+    Every endpoint except /health, /auth/register and /auth/login needs the header
+    `Authorization: Bearer <token>`. Errors look like {"detail": "message"}.
+    This tool assists review and is not legal advice.
+servers:
+  - url: http://localhost:8000
+security:
+  - bearerAuth: []
+tags:
+  - name: system
+  - name: auth
+  - name: documents
+  - name: review
+  - name: reports
+  - name: admin
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: health
+      summary: Server health check
+      security: []
+      responses:
+        "200":
+          description: The server is running.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Health"}
+              example: {status: ok}
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create a reviewer account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RegisterRequest"}
+            example: {name: Priya, email: priya@example.com, password: "a-long-password"}
+      responses:
+        "201":
+          description: Account created (role reviewer).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Log in and get an access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoginRequest"}
+            example: {email: priya@example.com, password: "a-long-password"}
+      responses:
+        "200":
+          description: Login succeeded.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/LoginResponse"}
+              example: {access_token: "eyJ...", token_type: bearer, role: reviewer, name: Priya}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: The current user
+      responses:
+        "200":
+          description: The logged-in user.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /documents:
+    post:
+      tags: [documents]
+      operationId: uploadDocument
+      summary: Upload a contract (PDF or DOCX) and start the analysis
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        "202":
+          description: Accepted. The analysis runs in the background; poll GET /documents/{id}.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocumentCreated"}
+              example: {id: 12, status: uploaded}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+    get:
+      tags: [documents]
+      operationId: listDocuments
+      summary: The current user's documents, newest first
+      parameters:
+        - {name: q, in: query, required: false, schema: {type: string}, description: Search in the file name.}
+        - {name: status, in: query, required: false, schema: {$ref: "#/components/schemas/DocumentStatus"}}
+        - name: sort
+          in: query
+          required: false
+          schema: {type: string, enum: [date, risk], default: date}
+      responses:
+        "200":
+          description: A list of documents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Document"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /documents/{id}:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    get:
+      tags: [documents]
+      operationId: getDocument
+      summary: One document with its status
+      responses:
+        "200":
+          description: The document.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Document"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [documents]
+      operationId: deleteDocument
+      summary: Delete the document and everything linked to it
+      responses:
+        "204": {description: Deleted.}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /documents/{id}/reprocess:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    post:
+      tags: [documents]
+      operationId: reprocessDocument
+      summary: Run the analysis again (only for failed or completed documents)
+      responses:
+        "202":
+          description: Accepted.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocumentCreated"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+
+  /documents/{id}/analysis:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    get:
+      tags: [documents]
+      operationId: getAnalysis
+      summary: The extracted text with clauses, risk ratings, review state, notes and missing clauses
+      description: Example data is in contracts/fixtures/sample_analysis_response.json.
+      responses:
+        "200":
+          description: The analysis.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AnalysisResponse"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /clauses/{id}:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    patch:
+      tags: [review]
+      operationId: reviewClause
+      summary: Confirm, reject or relabel a clause
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClauseReview"}
+            example: {reviewer_status: relabeled, reviewer_label: non_compete}
+      responses:
+        "200":
+          description: The updated clause.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Clause"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+
+  /clauses/{id}/notes:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    post:
+      tags: [review]
+      operationId: addNote
+      summary: Add a note to a clause
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NoteInput"}
+            example: {text: Ask the studio manager before signing.}
+      responses:
+        "201":
+          description: The new note.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Note"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+
+  /notes/{id}:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    put:
+      tags: [review]
+      operationId: updateNote
+      summary: Edit a note (only its author)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NoteInput"}
+      responses:
+        "200":
+          description: The updated note.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Note"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+    delete:
+      tags: [review]
+      operationId: deleteNote
+      summary: Delete a note (only its author)
+      responses:
+        "204": {description: Deleted.}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /documents/{id}/report:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    post:
+      tags: [reports]
+      operationId: createReport
+      summary: Create a PDF report for a completed document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReportRequest"}
+            example: {include_notes: true}
+      responses:
+        "201":
+          description: The report was created; download it with GET /reports/{id}/download.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Report"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+
+  /reports/{id}/download:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    get:
+      tags: [reports]
+      operationId: downloadReport
+      summary: Download the PDF report (owner only)
+      responses:
+        "200":
+          description: The PDF file.
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: adminListUsers
+      summary: List all users (admin only)
+      responses:
+        "200":
+          description: All users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+
+  /admin/users/{id}:
+    parameters:
+      - {$ref: "#/components/parameters/Id"}
+    patch:
+      tags: [admin]
+      operationId: adminUpdateUser
+      summary: Change a user's role or active flag (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UserUpdate"}
+            example: {is_active: false}
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /admin/rules:
+    get:
+      tags: [admin]
+      operationId: adminGetRules
+      summary: The current rules (admin only)
+      responses:
+        "200":
+          description: The rules.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Rules"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+    put:
+      tags: [admin]
+      operationId: adminPutRules
+      summary: Replace the rules (admin only). Used for documents analysed afterwards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Rules"}
+      responses:
+        "200":
+          description: The saved rules.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Rules"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+
+  /admin/metrics:
+    get:
+      tags: [admin]
+      operationId: adminMetrics
+      summary: Usage and failure counts (admin only)
+      responses:
+        "200":
+          description: The metrics.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Metrics"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+
+  /admin/low-confidence.csv:
+    get:
+      tags: [admin]
+      operationId: adminLowConfidenceCsv
+      summary: Low-confidence and reviewer-corrected predictions as CSV, without contract text (admin only)
+      description: "CSV columns: document_id, clause_type, confidence, needs_review, reviewer_status, reviewer_label."
+      responses:
+        "200":
+          description: A CSV file.
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+
+  responses:
+    BadRequest:
+      description: The request is not valid (for example a wrong file type).
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: Only PDF and DOCX files are accepted.}
+    Unauthorized:
+      description: Missing, invalid or expired token, or wrong credentials.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: Invalid or expired token.}
+    Forbidden:
+      description: The user's role or ownership does not allow this action.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: Not allowed.}
+    NotFound:
+      description: The item does not exist or belongs to another user.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: Not found.}
+    Conflict:
+      description: The action conflicts with the current state (duplicate email, document not ready).
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: Email already registered.}
+    TooLarge:
+      description: The uploaded file is larger than MAX_UPLOAD_MB.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: File is too large.}
+    ValidationError:
+      description: A field is missing or has the wrong type or value.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorResponse"}
+          example: {detail: Field required.}
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [detail]
+      description: |
+        Always one readable string. FastAPI returns a list for validation errors (422) by default,
+        so the backend must replace its validation error handler to return a single string.
+      properties:
+        detail: {type: string}
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string}
+
+    ClauseType:
+      type: string
+      enum: [governing_law, termination_for_convenience, non_compete, exclusivity, anti_assignment,
+             change_of_control, cap_on_liability, uncapped_liability, liquidated_damages,
+             ip_ownership_assignment]
+    RiskLevel:
+      type: string
+      enum: [high, medium, low]
+    DocumentStatus:
+      type: string
+      enum: [uploaded, extracting, classifying, scoring, completed, failed]
+    ReviewerStatus:
+      type: string
+      enum: [pending, confirmed, rejected, relabeled]
+    Role:
+      type: string
+      enum: [reviewer, admin]
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: {type: string, minLength: 1}
+        email: {type: string, minLength: 3}
+        password: {type: string, minLength: 8}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, minLength: 3}
+        password: {type: string, minLength: 1}
+    LoginResponse:
+      type: object
+      required: [access_token, token_type, role, name]
+      properties:
+        access_token: {type: string}
+        token_type: {type: string, enum: [bearer]}
+        role: {$ref: "#/components/schemas/Role"}
+        name: {type: string}
+
+    User:
+      type: object
+      required: [id, name, email, role, is_active, created_at]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        email: {type: string}
+        role: {$ref: "#/components/schemas/Role"}
+        is_active: {type: boolean}
+        created_at: {type: string, format: date-time}
+    UserUpdate:
+      type: object
+      properties:
+        role: {$ref: "#/components/schemas/Role"}
+        is_active: {type: boolean}
+
+    DocumentCreated:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: integer}
+        status: {$ref: "#/components/schemas/DocumentStatus"}
+
+    Document:
+      type: object
+      required: [id, filename, status, overall_risk, page_count, model_version, uploaded_at, error_message, warnings]
+      properties:
+        id: {type: integer}
+        filename: {type: string}
+        status: {$ref: "#/components/schemas/DocumentStatus"}
+        overall_risk:
+          description: Null until the analysis is completed.
+          anyOf:
+            - {$ref: "#/components/schemas/RiskLevel"}
+            - {type: "null"}
+        page_count: {type: [integer, "null"]}
+        model_version: {type: [string, "null"]}
+        uploaded_at: {type: string, format: date-time}
+        error_message:
+          description: A short, user-friendly message when status is failed, otherwise null.
+          type: [string, "null"]
+        warnings:
+          description: Messages such as "Some pages were scanned; text quality may be lower".
+          type: array
+          items: {type: string}
+
+    Note:
+      type: object
+      required: [id, user_id, author_name, text, created_at]
+      properties:
+        id: {type: integer}
+        user_id: {type: integer}
+        author_name: {type: string}
+        text: {type: string}
+        created_at: {type: string, format: date-time}
+    NoteInput:
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1}
+
+    Clause:
+      type: object
+      required: [id, clause_type, start, end, text, confidence, needs_review, risk_level,
+                 explanation, reviewer_status, reviewer_label, notes]
+      properties:
+        id: {type: integer}
+        clause_type: {$ref: "#/components/schemas/ClauseType"}
+        start: {type: integer, minimum: 0, description: Character offset into the extracted text.}
+        end: {type: integer, minimum: 1, description: Character offset (exclusive) into the extracted text.}
+        text: {type: string}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        needs_review: {type: boolean}
+        risk_level: {$ref: "#/components/schemas/RiskLevel"}
+        explanation: {type: string}
+        reviewer_status: {$ref: "#/components/schemas/ReviewerStatus"}
+        reviewer_label:
+          description: The clause type chosen by the reviewer when reviewer_status is relabeled, otherwise null.
+          anyOf:
+            - {$ref: "#/components/schemas/ClauseType"}
+            - {type: "null"}
+        notes:
+          type: array
+          items: {$ref: "#/components/schemas/Note"}
+    ClauseReview:
+      type: object
+      required: [reviewer_status]
+      description: reviewer_label is required when reviewer_status is relabeled and must be omitted or null otherwise.
+      properties:
+        reviewer_status:
+          type: string
+          enum: [confirmed, rejected, relabeled]
+        reviewer_label:
+          anyOf:
+            - {$ref: "#/components/schemas/ClauseType"}
+            - {type: "null"}
+
+    MissingClause:
+      type: object
+      required: [clause_type, risk_level, explanation]
+      properties:
+        clause_type: {$ref: "#/components/schemas/ClauseType"}
+        risk_level: {$ref: "#/components/schemas/RiskLevel"}
+        explanation: {type: string}
+
+    AnalysisResponse:
+      type: object
+      required: [document, text, clauses, missing_clauses]
+      properties:
+        document: {$ref: "#/components/schemas/Document"}
+        text:
+          type: string
+          description: The extracted text. All clause offsets point into this exact string.
+        clauses:
+          type: array
+          items: {$ref: "#/components/schemas/Clause"}
+        missing_clauses:
+          type: array
+          items: {$ref: "#/components/schemas/MissingClause"}
+
+    ReportRequest:
+      type: object
+      required: [include_notes]
+      properties:
+        include_notes: {type: boolean}
+    Report:
+      type: object
+      required: [id, document_id, created_at]
+      properties:
+        id: {type: integer}
+        document_id: {type: integer}
+        created_at: {type: string, format: date-time}
+
+    Rules:
+      type: object
+      required: [tau_accept, tau_floor, expected_clauses, missing_risk, base_risk]
+      additionalProperties: false
+      properties:
+        tau_accept: {type: number, minimum: 0, maximum: 1}
+        tau_floor: {type: number, minimum: 0, maximum: 1}
+        expected_clauses:
+          type: array
+          items: {$ref: "#/components/schemas/ClauseType"}
+        missing_risk:
+          type: object
+          propertyNames: {$ref: "#/components/schemas/ClauseType"}
+          additionalProperties: {$ref: "#/components/schemas/RiskLevel"}
+        base_risk:
+          type: object
+          propertyNames: {$ref: "#/components/schemas/ClauseType"}
+          additionalProperties: {$ref: "#/components/schemas/RiskLevel"}
+
+    Metrics:
+      type: object
+      required: [documents_processed, documents_failed, average_processing_seconds,
+                 clauses_total, clauses_reviewed, clauses_corrected]
+      properties:
+        documents_processed: {type: integer, minimum: 0}
+        documents_failed: {type: integer, minimum: 0}
+        average_processing_seconds: {type: number, minimum: 0}
+        clauses_total: {type: integer, minimum: 0}
+        clauses_reviewed: {type: integer, minimum: 0}
+        clauses_corrected: {type: integer, minimum: 0}
